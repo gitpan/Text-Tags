@@ -6,36 +6,42 @@ use strict;
 sub new {
     my $class = shift;
     bless {}, $class;
-} 
+}
 
 sub parse_tags {
-    my $self = shift;
+    my $self   = shift;
     my $string = shift;
 
     my @tags;
     my %seen;
-   
-    # In this regexp, exactly one paren-group matches.
+
+    # In this regexp, the actual content of the tag is in the last
+    # paren-group which matches in each alternative.
     # Thus it can be accessed as $+
-    while ($string =~ /\G \s* (?:
-                         " ([^"]*) (?: " | $) |      # double-quoted string
-                         ' ([^']*) (?: ' | $) |      # single-quoted string
-			 (\S+)                       # other 
-		     )/gx) {
-	my $tag = $+;
+    while (
+        $string =~ /\G [\s,]* (?:
+                        (") ([^"]*) (?: " | $) |      # double-quoted string
+                        (') ([^']*) (?: ' | $) |      # single-quoted string
+                        ([^\s,]+)                   # other 
+		     )/gx
+        )
+    {
+        my $tag       = $+;
+        my $is_quoted = $1 || $3;
 
-	# shed explictly quoted empty strings
-	next unless length $tag;
+        # shed explictly quoted empty strings
+        next unless length $tag;
 
-	$tag =~ s/^\s+//; $tag =~ s/\s+$//;
-	$tag =~ s/\s+/ /g;
-	
-	# Tags should be unique, but in the right order
-	push @tags, $tag unless $seen{$tag}++;
-    } 
+        $tag =~ s/^\s+//;
+        $tag =~ s/\s+$//;
+        $tag =~ s/\s+/ /g;
+
+        # Tags should be unique, but in the right order
+        push @tags, $tag unless $seen{$tag}++;
+    }
 
     return @tags;
-} 
+}
 
 sub join_tags {
     my $self = shift;
@@ -45,66 +51,66 @@ sub join_tags {
     my @quoted_tags;
 
     for my $tag (@tags) {
-	$tag =~ s/^\s+//; $tag =~ s/\s+$//;
-	$tag =~ s/\s+/ /g;
+        $tag =~ s/^\s+//;
+        $tag =~ s/\s+$//;
+        $tag =~ s/\s+/ /g;
 
-	next unless length $tag;
+        next unless length $tag;
 
-	my $quote;
+        my $quote;
 
-	if ($tag =~ /"/ and $tag =~ /'/) {
-	    # This *could* be an illegal tag.
+        if ( $tag =~ /"/ and $tag =~ /'/ ) {
 
-	    if ($tag =~ /^['"]/ or $tag =~/ /) {
-		# Yup, it's illegal
-		$tag =~ tr/"/'/;
-		$quote = q(");
-	    } else {
-		# It has quotes in the inside, but no spaces or at the
-		# front, so just leave it unquoted.
-		$quote = q();
-	    } 
-	} elsif ($tag =~ /"/) {
-	    # It contains a ", so either it needs to be unquoted or single-quoted
-	    if ($tag =~ / / or $tag =~ /^"/) {
-		$quote = q(');
-	    } else {
-		$quote = q();
-	    } 
-	} elsif ($tag =~ /'/) {
-	    # It contains a ', so either it needs to be unquoted or double-quoted
-	    if ($tag =~ / / or $tag =~ /^'/) {
-		$quote = q(");
-	    } else {
-		$quote = q();
-	    } 
-	} elsif ($tag =~ / /) {
-	    # By this point we know that it contains no quotes.
-	    $quote = q(");
-	} else {
-	    # No special characters at all!
-	    $quote = q();
-	} 
+            # This is an illegal tag.  Normalize to just single-quotes.
+            # Quote it too, though technically the new form might not need it.
+            $tag =~ tr/"/'/;
+            $quote = q{"};
+        } elsif ( $tag =~ /"/ ) {
 
-	# $tag is now fully normalized (both by whitespace and by anti-illegalization).
-	# Have we seen it?
+            # It contains a ", so either it needs to be unquoted or
+            # single-quoted
+            if ( $tag =~ / / or $tag =~ /,/ or $tag =~ /^"/ ) {
+                $quote = q{'};
+            } else {
+                $quote = q{};
+            }
+        } elsif ( $tag =~ /'/ ) {
 
-	next if $seen{$tag}++;
+            # It contains a ', so either it needs to be unquoted or
+            # double-quoted
+            if ( $tag =~ / / or $tag =~ /,/ or $tag =~ /^'/ ) {
+                $quote = q{"};
+            } else {
+                $quote = q{};
+            }
+        } elsif ( $tag =~ /[ ,]/ ) {
 
-	push @quoted_tags, "$quote$tag$quote";
-    } 
+            # By this point we know that it contains no quotes.
+            # But it needs to be quoted.
+            $quote = q{"};
+        } else {
+
+            # No special characters at all!
+            $quote = q{};
+        }
+
+        # $tag is now fully normalized (both by whitespace and by
+        # anti-illegalization).  Have we seen it?
+
+        next if $seen{$tag}++;
+
+        push @quoted_tags, "$quote$tag$quote";
+    }
 
     return join ' ', @quoted_tags;
-} 
+}
 
-
-1; # Magic true value required at end of module
+1;    # Magic true value required at end of module
 __END__
 
 =head1 NAME
 
 Text::Tags::Parser - parses "folksonomy" space-separated tags
-
 
 =head1 SYNOPSIS
 
@@ -114,28 +120,28 @@ Text::Tags::Parser - parses "folksonomy" space-separated tags
   
 =head1 DESCRIPTION
 
-Parses "folksonomies", which are simple space-separated-but-optionally-quoted tag lists.
+Parses "folksonomies", which are simple space-or-comma-separated-but-optionally-quoted tag lists.
 
-Specifically, tags can be any string, with the following exception: if it
-contains both a single quote and a double quote, then it cannot contain
-whitespace or start with a quote.  Fortunately, this is a pretty obscure
-restriction.  In addition, all whitespace inside tags is normalized to a single
-space (with no leading or trailing whitespace).  
+Specifically, tags can be any string, as long as they don't contain both a
+single and a double quote.  Hopefully, this is a pretty obscure restriction.  In
+addition, all whitespace inside tags is normalized to a single space (with no
+leading or trailing whitespace).  
 
-In a tag list string, tags can optionally be quoted with either single or
-double quotes.  B<There is no escaping of either kind of quote>, although you
-can include one type of quote inside a string quoted with the other.  Quotes
-can also just be included inside tags, as long as they aren't at the beginning;
-thus a tag like C<joe's> can just be entered without any extra quoting.  Tags
-are separated by whitespace, though quoted tags can run into each other without
-whitespace.  Empty tags (put in explicitly with C<""> or C<''>) are ignored.
+In a tag list string, tags can optionally be quoted with either single or double
+quotes.  B<There is no escaping of either kind of quote>, although you can
+include one type of quote inside a string quoted with the other.  Quotes can
+also just be included inside tags, as long as they aren't at the beginning; thus
+a tag like C<joe's> can just be entered without any extra quoting.  Tags are
+separated by whitespace and/or commas, though quoted tags can run into each
+other without whitespace.  Empty tags (put in explicitly with C<""> or C<''>)
+are ignored.  (Note that commas are not normalized with whitespace, and can be
+included in a tag if you quote them.)
 
 Why did the previous paragraph need to be so detailed?  Because L<Text::Tags::Parser> 
 B<always successfully parses> every line.  That is, every single tags line converts into
 a list of tags, without any error conditions.  For general use, you can just understand the
-rules as being B<separate tags with spaces, and put either kind of quotes around tags that
+rules as being B<separate tags with spaces or commas, and put either kind of quotes around tags that
 need to have spaces>.
-
 
 =head1 METHODS
 
