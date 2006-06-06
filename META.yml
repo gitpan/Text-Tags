@@ -1,12 +1,13 @@
-name: Text-Tags
-version: 0.03
 abstract: parses "folksonomy" space-separated tags (stub module)
-author: David Glasser <glasser@bestpractical.com>
-license: perl
+author: 'David Glasser <glasser@bestpractical.com>'
 distribution_type: module
-requires:
-  Test::More: 0
+generated_by: Module::Install version 0.63
+license: perl
+name: Text-Tags
 no_index:
   directory:
     - inc
-generated_by: Module::Install version 0.46
+    - t
+requires:
+  Test::More: 0
+version: 0.04

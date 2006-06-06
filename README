@@ -1,4 +1,4 @@
-Text-Tags version 0.0.1
+Text-Tags version 0.04
 
 Text::Tags is a folksonomy parser.  It takes a string of space-separated "tags"
 and splits them.  You can include spaces in tags by putting them in "double quotes"
